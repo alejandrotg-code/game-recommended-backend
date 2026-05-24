@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+.pytest_cache/
+
+# Entornos y secretos
+.env
+.env.*
+
+# Modelo
+model/
+
+# Editores y SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

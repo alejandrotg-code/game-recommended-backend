@@ -1,4 +1,4 @@
-# Steam Reviews Recommender
+# Game Recommended
 
 [![Demo](https://img.shields.io/badge/Demo-En%20Vivo-brightgreen?style=for-the-badge)](https://game-recommended.alejandrotg.es)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)

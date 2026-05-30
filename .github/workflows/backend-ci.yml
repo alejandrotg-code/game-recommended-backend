@@ -1,0 +1,59 @@
+name: Backend FastAPI CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Descargar código del repositorio
+      uses: actions/checkout@v4
+
+    - name: Configurar Entorno de Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: '3.10.20'
+        activate-environment: test-env
+
+    - name: Instalar dependencias con Conda y Pip
+      shell: bash -el {0}
+      run: |
+        conda install -y pytest flake8
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Validar formato del código (Linter)
+      shell: bash -el {0}
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Ejecutar Tests con Pytest
+      shell: bash -el {0}
+      run: |
+        pytest
+
+  deploy:
+    name: 🚀 Desplegar en VPS
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Conectar vía SSH y actualizar producción
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_PORT }}
+        script: |
+          cd /home/alejandrotg/apps/game-recommended-backend
+          git pull origin main
+          source venv/bin/activate
+          pip install -r requirements.txt
+          sudo systemctl restart steam-backend

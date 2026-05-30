@@ -1,13 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
 from middleware import RateLimitMiddleware
 from services import sentiment_service
 from routers import games_router
 
 # Carga de variables de entorno
-load_dotenv()
 
 app = FastAPI(
     title="Steam Reviews Recommender API",
@@ -18,7 +16,7 @@ app = FastAPI(
 # Configurar middleware de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["localhost", "http://localhost:5173"],
+    allow_origins=["http://localhost:5173"],  # Cambia esto por el origen de tu frontend
     allow_credentials=True,
     allow_methods=["GET"],
     allow_headers=["*"],

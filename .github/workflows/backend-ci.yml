@@ -56,4 +56,4 @@ jobs:
           git pull origin main
           source venv/bin/activate
           pip install -r requirements.txt
-          sudo systemctl restart steam-backend
+          echo "${{ secrets.VPS_PASSWORD }}" | sudo -S systemctl restart steam-backend

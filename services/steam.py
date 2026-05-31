@@ -1,7 +1,7 @@
-import requests
+import httpx
 from fastapi import HTTPException
 
-def buscar_juegos_steam(term: str) -> dict:
+async def buscar_juegos_steam(term: str) -> dict:
     """
     Busca juegos en la API pública de Steam utilizando un término.
     """
@@ -13,7 +13,8 @@ def buscar_juegos_steam(term: str) -> dict:
     }
     
     try:
-        response = requests.get(url, params=params, timeout=10)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10.0)
         if response.status_code != 200:
             raise HTTPException(
                 status_code=502, 
@@ -54,13 +55,13 @@ def buscar_juegos_steam(term: str) -> dict:
             "games": resultados
         }
         
-    except requests.exceptions.RequestException as e:
+    except httpx.HTTPError as e:
         raise HTTPException(
             status_code=503, 
             detail=f"Fallo de conexión con la API de Steam: {str(e)}"
         )
 
-def obtener_reseñas_steam(app_id: int, limit: int) -> list:
+async def obtener_reseñas_steam(app_id: int, limit: int) -> list:
     """
     Obtiene la lista de reseñas en español directamente desde la API pública de reseñas de Steam.
     """
@@ -75,7 +76,8 @@ def obtener_reseñas_steam(app_id: int, limit: int) -> list:
     }
     
     try:
-        response = requests.get(url, params=params, timeout=10)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10.0)
         if response.status_code != 200:
             raise HTTPException(
                 status_code=502, 
@@ -91,7 +93,7 @@ def obtener_reseñas_steam(app_id: int, limit: int) -> list:
         
         return data.get("reviews", [])
         
-    except requests.exceptions.RequestException as e:
+    except httpx.HTTPError as e:
         raise HTTPException(
             status_code=503, 
             detail=f"Fallo de conexión al solicitar reseñas a Steam: {str(e)}"

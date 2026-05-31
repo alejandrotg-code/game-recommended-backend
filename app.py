@@ -5,8 +5,6 @@ from middleware import RateLimitMiddleware
 from services import sentiment_service
 from routers import games_router
 
-# Carga de variables de entorno
-
 app = FastAPI(
     title="Steam Reviews Recommender API",
     description="API para buscar juegos de Steam y analizar el sentimiento de sus reseñas en español utilizando un modelo de Machine Learning.",

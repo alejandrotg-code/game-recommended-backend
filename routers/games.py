@@ -5,14 +5,14 @@ from services.sentiment import sentiment_service
 router = APIRouter()
 
 @router.get("/api/search")
-def buscar_juegos(term: str = Query(..., min_length=1, description="Nombre o término de búsqueda del juego")):
+async def buscar_juegos(term: str = Query(..., min_length=1, description="Nombre o término de búsqueda del juego")):
     """
     Busca juegos en la API pública de Steam utilizando un término.
     """
-    return buscar_juegos_steam(term)
+    return await buscar_juegos_steam(term)
 
 @router.get("/api/analyze/{app_id}")
-def analizar_reseñas(
+async def analizar_reseñas(
     app_id: int, 
     limit: int = Query(30, ge=5, le=50, description="Cantidad máxima de reseñas a analizar (máximo 50)")
 ):
@@ -27,7 +27,7 @@ def analizar_reseñas(
         )
     
     # 1. Obtener reseñas desde la API pública de Steam
-    reviews_raw = obtener_reseñas_steam(app_id, limit)
+    reviews_raw = await obtener_reseñas_steam(app_id, limit)
     
     if not reviews_raw:
         return {

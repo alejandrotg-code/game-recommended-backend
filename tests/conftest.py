@@ -1,64 +1,60 @@
 import pytest
-import sys, os, re
-from unittest.mock import MagicMock, PropertyMock
+from fastapi.testclient import TestClient
+from app import app
+from services import sentiment_service
 
-# Añadimos el backend al path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# --- Mocks de sentiment_service ANTES de importar la app ---
 class MockVectorizer:
     def transform(self, texts):
         return texts
 
+
 class MockPredictionResult:
     def __init__(self, predictions):
         self.predictions = predictions
+
     def tolist(self):
         return self.predictions
+
 
 class MockModel:
     def predict(self, counts):
         predictions = []
         for text in counts:
-            if any(w in text for w in ["buen","excelente","recomendado","gusto","genial","divertido","juegazo"]):
+            if any(w in text for w in ["buen", "excelente", "recomendado", "gusto", "genial", "divertido", "juegazo"]):
                 predictions.append(1)
             else:
                 predictions.append(0)
         return MockPredictionResult(predictions)
 
-class MockSentimentService:
-    model_loaded = True
-    model_path = "model/mock.joblib"
-    vectorizador = MockVectorizer()
-    modelo = MockModel()
 
-    def limpiar_resena(self, texto):
-        texto = str(texto).lower()
-        texto = re.sub(r'@\w+', '', texto)
-        texto = re.sub(r'#', '', texto)
-        texto = re.sub(r'[^\w\s]', '', texto)
-        texto = re.sub(r'\d+', '', texto)
-        return texto.strip()
+@pytest.fixture(autouse=True)
+def setup_mock_model():
+    """
+    Inyecta el mock sobre la instancia real sin reemplazarla, para que
+    todos los módulos que ya la importaron reciban el mismo objeto parcheado.
+    """
+    orig_vectorizador = sentiment_service.vectorizador
+    orig_modelo = sentiment_service.modelo
 
-    def predecir_sentimientos(self, textos):
-        limpios = [self.limpiar_resena(t) for t in textos]
-        return self.modelo.predict(limpios).tolist()
+    sentiment_service.vectorizador = MockVectorizer()
+    sentiment_service.modelo = MockModel()
 
-# Parcheamos el singleton antes de que cualquier módulo lo importe
-import services.sentiment as _sent_mod
-_sent_mod.sentiment_service = MockSentimentService()
+    yield
 
-from fastapi.testclient import TestClient
-from app import app
+    sentiment_service.vectorizador = orig_vectorizador
+    sentiment_service.modelo = orig_modelo
+
 
 @pytest.fixture(autouse=True)
 def reset_cache():
-    """Limpia el caché entre tests."""
+    """Limpia el caché entre tests para evitar contaminación."""
     from cachetools import TTLCache
     import services.cache as _cache_mod
     _cache_mod._search_cache = TTLCache(maxsize=200, ttl=300)
     _cache_mod._analyze_cache = TTLCache(maxsize=100, ttl=1800)
     yield
+
 
 @pytest.fixture
 def client():

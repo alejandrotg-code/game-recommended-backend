@@ -3,6 +3,9 @@ fastapi==0.136.1
 uvicorn==0.47.0
 python-dotenv==1.2.2
 
+# Cache
+cachetools
+
 # Machine Learning
 joblib==1.5.3
 scikit-learn==1.7.2

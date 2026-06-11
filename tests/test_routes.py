@@ -28,15 +28,20 @@ def test_search_endpoint(mock_buscar, client):
     assert len(data["games"]) == 1
     assert data["games"][0]["name"] == "Portal"
 
+@patch("routers.games.obtener_detalles_juego")
 @patch("routers.games.obtener_reseñas_steam")
-def test_analyze_endpoint(mock_obtener_reseñas, client):
+def test_analyze_endpoint(mock_obtener_reseñas, mock_obtener_detalles, client):
     """
     Verifica que el endpoint '/api/analyze/{app_id}' clasifique correctamente
     las reseñas y calcule de forma correcta las estadísticas de recomendación.
     """
-    # Dos reseñas de prueba:
-    # La primera contiene "buen" -> Clasificada como Positivo (1) por el conftest mock
-    # La segunda no contiene palabras clave -> Clasificada como Negativo (0)
+    mock_obtener_detalles.return_value = {
+        "developer": "Valve",
+        "genres": ["Action"],
+        "release_date": "10 Oct 2007",
+        "price": "9.75 EUR"
+    }
+    
     mock_obtener_reseñas.return_value = [
         {
             "recommendationid": "1",
@@ -64,3 +69,21 @@ def test_analyze_endpoint(mock_obtener_reseñas, client):
     assert len(data["reviews_classified"]) == 2
     assert data["reviews_classified"][0]["sentiment_predicted"] == "Positivo"
     assert data["reviews_classified"][1]["sentiment_predicted"] == "Negativo"
+    assert "game_details" in data
+    assert data["game_details"]["developer"] == "Valve"
+
+
+@patch("routers.games.analizar_reseñas")
+def test_badge_endpoint(mock_analizar, client):
+    """
+    Verifica que el endpoint '/api/games/{app_id}/badge' devuelva una imagen SVG.
+    """
+    mock_analizar.return_value = {
+        "recommendation_level": "Extremadamente Recomendado",
+        "sentiment_stats": {"positives_pct": 92.5}
+    }
+    response = client.get("/api/games/400/badge")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/svg+xml"
+    assert "svg" in response.text
+    assert "Ext. Recomendado" in response.text

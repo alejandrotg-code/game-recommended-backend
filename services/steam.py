@@ -98,3 +98,58 @@ async def obtener_reseñas_steam(app_id: int, limit: int) -> list:
             status_code=503, 
             detail=f"Fallo de conexión al solicitar reseñas a Steam: {str(e)}"
         )
+
+
+async def obtener_detalles_juego(app_id: int) -> dict:
+    """
+    Obtiene géneros, desarrollador, fecha de lanzamiento y precio de Steam
+    usando la API de appdetails de Steam.
+    """
+    url = "https://store.steampowered.com/api/appdetails"
+    params = {
+        "appids": app_id,
+        "l": "spanish",
+        "cc": "ES"
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10.0)
+        if response.status_code != 200:
+            return {}
+            
+        data = response.json()
+        app_data = data.get(str(app_id), {})
+        if not app_data.get("success", False):
+            return {}
+            
+        data_info = app_data.get("data", {})
+        
+        # Desarrollador
+        developers = data_info.get("developers", [])
+        desarrollador = developers[0] if developers else "Desconocido"
+        
+        # Géneros
+        genres_list = data_info.get("genres", [])
+        generos = [g.get("description") for g in genres_list if g.get("description")]
+        
+        # Fecha de lanzamiento
+        release_date = data_info.get("release_date", {})
+        fecha_lanzamiento = release_date.get("date", "Desconocido")
+        
+        # Precio actual
+        price_overview = data_info.get("price_overview", {})
+        precio = price_overview.get("final_formatted")
+        if not precio:
+            is_free = data_info.get("is_free", False)
+            precio = "Gratis" if is_free else "No disponible"
+            
+        return {
+            "developer": desarrollador,
+            "genres": generos,
+            "release_date": fecha_lanzamiento,
+            "price": precio
+        }
+    except Exception:
+        return {}
+

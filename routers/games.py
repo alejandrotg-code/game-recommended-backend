@@ -1,9 +1,56 @@
-from fastapi import APIRouter, Query, HTTPException
-from services.steam import buscar_juegos_steam, obtener_reseñas_steam
+from fastapi import APIRouter, Query, HTTPException, Response
+from services.steam import buscar_juegos_steam, obtener_reseñas_steam, obtener_detalles_juego
 from services.sentiment import sentiment_service
 from services.cache import cache_service
 
 router = APIRouter()
+
+
+def generar_badge_svg(recommendation_level: str, positives_pct: float) -> str:
+    color_map = {
+        "Extremadamente Recomendado": "#10b981",
+        "Recomendado": "#3b82f6",
+        "Mixto": "#f59e0b",
+        "No Recomendado": "#f43f5e",
+        "Sin reseñas": "#6b7280"
+    }
+    color = color_map.get(recommendation_level, "#6b7280")
+    
+    verdict_short = recommendation_level
+    if verdict_short == "Extremadamente Recomendado":
+        verdict_short = "Ext. Recomendado"
+        
+    text_content = f"{verdict_short} ({positives_pct:.0f}%)"
+    
+    # Ancho del badge dinámico
+    text_width = len(text_content) * 7 + 12
+    label_width = 75
+    total_width = label_width + text_width
+    
+    label_x = (label_width / 2) * 10
+    text_x = (label_width + text_width / 2) * 10
+    
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20" viewBox="0 0 {total_width * 10} 200">
+  <linearGradient id="g" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r">
+    <rect width="{total_width * 10}" height="200" rx="30" fill="#fff"/>
+  </clipPath>
+  <g clip-path="url(#r)">
+    <rect width="{label_width * 10}" height="200" fill="#555"/>
+    <rect x="{label_width * 10}" width="{text_width * 10}" height="200" fill="{color}"/>
+    <rect width="{total_width * 10}" height="200" fill="url(#g)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text x="{label_x}" y="140" fill="#010101" fill-opacity=".3">Steam IA</text>
+    <text x="{label_x}" y="130">Steam IA</text>
+    <text x="{text_x}" y="140" fill="#010101" fill-opacity=".3">{text_content}</text>
+    <text x="{text_x}" y="130">{text_content}</text>
+  </g>
+</svg>"""
+
 
 
 @router.get("/api/search")
@@ -47,17 +94,21 @@ async def analizar_reseñas(
     # 1. Obtener reseñas desde la API pública de Steam
     reviews_raw = await obtener_reseñas_steam(app_id, limit)
 
+    # 1.5 Obtener detalles adicionales del juego
+    game_details = await obtener_detalles_juego(app_id)
+
     if not reviews_raw:
         return {
             "app_id": app_id,
-            "total_reviews": 0,
+            "total_reviews_analyzed": 0,
             "recommendation_level": "Sin reseñas",
             "sentiment_stats": {
                 "positives_pct": 0,
                 "negatives_pct": 0
             },
             "steam_voted_up_pct": 0,
-            "reviews_classified": []
+            "reviews_classified": [],
+            "game_details": game_details
         }
 
     # 2. Limpieza y preparación de reseñas
@@ -118,8 +169,39 @@ async def analizar_reseñas(
             "negatives_pct": neg_ia_pct
         },
         "steam_voted_up_pct": pos_steam_pct,
-        "reviews_classified": reseñas_clasificadas
+        "reviews_classified": reseñas_clasificadas,
+        "game_details": game_details
     }
 
     cache_service.set_analyze(app_id, limit, result)
     return result
+
+
+@router.get("/api/games/{app_id}/badge")
+async def obtener_badge(app_id: int):
+    """
+    Devuelve un SVG embebible con el veredicto y el porcentaje positivo de reseñas.
+    Utiliza el caché si está disponible, o realiza el análisis al vuelo de 30 reseñas.
+    """
+    cached = cache_service.get_analyze(app_id, 30)
+    if not cached:
+        try:
+            cached = await analizar_reseñas(app_id, limit=30)
+        except Exception:
+            cached = {
+                "recommendation_level": "Sin reseñas",
+                "sentiment_stats": {"positives_pct": 0.0}
+            }
+            
+    verdict = cached.get("recommendation_level", "Sin reseñas")
+    pos_pct = cached.get("sentiment_stats", {}).get("positives_pct", 0.0)
+    
+    svg_content = generar_badge_svg(verdict, pos_pct)
+    
+    return Response(
+        content=svg_content,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "max-age=1800, public"
+        }
+    )

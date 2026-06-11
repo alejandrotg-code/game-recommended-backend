@@ -40,7 +40,7 @@ async def analizar_reseñas(
             detail="El modelo de análisis de sentimiento no está disponible en el servidor."
         )
 
-    cached = cache_service.get_analyze(app_id)
+    cached = cache_service.get_analyze(app_id, limit)
     if cached:
         return cached
 
@@ -121,5 +121,5 @@ async def analizar_reseñas(
         "reviews_classified": reseñas_clasificadas
     }
 
-    cache_service.set_analyze(app_id, result)
+    cache_service.set_analyze(app_id, limit, result)
     return result

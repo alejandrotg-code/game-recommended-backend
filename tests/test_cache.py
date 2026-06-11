@@ -46,24 +46,24 @@ def test_search_expira_tras_ttl(cache):
 
 
 def test_analyze_miss_devuelve_none(cache):
-    assert cache.get_analyze(400) is None
+    assert cache.get_analyze(400, 30) is None
 
 
 def test_analyze_hit_devuelve_datos(cache):
     datos = {"app_id": 400, "recommendation_level": "Recomendado"}
-    cache.set_analyze(400, datos)
-    assert cache.get_analyze(400) == datos
+    cache.set_analyze(400, 30, datos)
+    assert cache.get_analyze(400, 30) == datos
 
 
 def test_analyze_expira_tras_ttl(cache):
-    cache.set_analyze(730, {"app_id": 730})
+    cache.set_analyze(730, 30, {"app_id": 730})
     time.sleep(1.1)
-    assert cache.get_analyze(730) is None
+    assert cache.get_analyze(730, 30) is None
 
 
 def test_stats_refleja_tamanio_actual(cache):
     cache.set_search("celeste", {})
-    cache.set_analyze(504230, {})
+    cache.set_analyze(504230, 30, {})
     stats = cache.stats
     assert stats["search"]["size"] == 1
     assert stats["analyze"]["size"] == 1

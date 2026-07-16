@@ -9,7 +9,10 @@ cachetools
 # Machine Learning
 joblib==1.5.3
 scikit-learn==1.7.2
+pandas
+tensorflow
 
 # Testing
 pytest==9.0.3
 httpx==0.28.1
+

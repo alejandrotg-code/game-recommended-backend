@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 
-Un sistema inteligente y moderno diseñado para analizar las reseñas en español de videojuegos en Steam utilizando Procesamiento de Lenguaje Natural (NLP) y Machine Learning para determinar el nivel real de recomendación de los usuarios.
+Un sistema inteligente y moderno diseñado para analizar las reseñas en español de videojuegos en Steam utilizando Procesamiento de Lenguaje Natural (NLP) y Machine Learning para determinar el nivel real de recomendación de los usuarios, además de recomendar nuevos títulos mediante clasificación multietiqueta por descripción de juego.
 
 🚀 **[Prueba la Demo en Vivo aquí](https://game-recommended.alejandrotg.es)**
 
@@ -14,9 +14,11 @@ Un sistema inteligente y moderno diseñado para analizar las reseñas en españo
 
 - 🔍 **Buscador de Juegos**: Conexión directa con la API pública de Steam para encontrar títulos en español con su respectivo precio y puntuación.
 - 🧠 **Análisis de Sentimiento IA**: Clasificación en tiempo real de reseñas en español utilizando un modelo entrenado de Machine Learning (Naive Bayes).
+- 🎯 **Recomendación por Descripción (Keras/TensorFlow)**: Red neuronal profunda secuencial (MLP) entrenada en Keras para predecir las probabilidades de géneros y recomendar el TOP 10 de juegos asociados con consulta en paralelo a la API de Steam.
 - 📊 **Métricas Comparativas**: Compara el porcentaje de votos positivos registrados oficialmente en Steam contra la clasificación inteligente realizada por nuestro modelo IA.
 - 🛡️ **Control de Flujo (Rate Limiting)**: Rate limiter interno integrado por IP para proteger el backend de accesos abusivos y spam.
 - 🧪 **Suite de Pruebas**: Cobertura robusta de tests unitarios y de integración con `pytest` y FastAPI `TestClient`.
+
 
 ---
 
@@ -76,9 +78,11 @@ pytest -v
 ```
 
 Las pruebas cubren:
-- **Limpieza de Texto**: Validación del preprocesamiento de comentarios en español.
-- **Servicio de Steam**: Mockeo completo de las llamadas HTTP de red para evitar llamadas reales.
-- **Rutas de API**: Pruebas de integración sobre los endpoints de búsqueda y análisis utilizando `TestClient`.
+- **Limpieza de Texto**: Validación del preprocesamiento de comentarios y descripciones en español.
+- **Servicio de Steam**: Mockeo completo de las llamadas HTTP de red para evitar peticiones reales.
+- **Rutas de API**: Pruebas de integración sobre los endpoints de búsqueda, análisis y recomendación por IA utilizando `TestClient`.
+- **Clasificador de Keras**: Pruebas de la lógica de recomendación con inyección de mocks para aislar la carga del modelo TensorFlow.
+
 
 ---
 

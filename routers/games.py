@@ -205,3 +205,30 @@ async def obtener_badge(app_id: int):
             "Cache-Control": "max-age=1800, public"
         }
     )
+
+
+@router.get("/api/recommend")
+async def recomendar_juegos(
+    description: str = Query(..., min_length=3, description="Descripción del tipo de juego que buscas")
+):
+    """
+    Recibe una descripción de juego en español, predice su género principal usando Keras,
+    y devuelve los juegos populares en Steam de ese género.
+    """
+    try:
+        from services import recommendation_service
+        if not recommendation_service.ready:
+            raise HTTPException(
+                status_code=503,
+                detail="El clasificador de géneros no está cargado o disponible en el servidor."
+            )
+        resultado = await recommendation_service.recommend_by_description(description)
+        return resultado
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al generar recomendaciones: {str(e)}"
+        )
+

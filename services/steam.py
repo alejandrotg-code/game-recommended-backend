@@ -143,13 +143,20 @@ async def obtener_detalles_juego(app_id: int) -> dict:
         if not precio:
             is_free = data_info.get("is_free", False)
             precio = "Gratis" if is_free else "No disponible"
+
+        # Metascore (Metacritic)
+        metacritic = data_info.get("metacritic", {})
+        metascore = metacritic.get("score") or "N/A"
             
         return {
             "developer": desarrollador,
             "genres": generos,
             "release_date": fecha_lanzamiento,
-            "price": precio
+            "price": precio,
+            "metascore": metascore
         }
     except Exception:
         return {}
+
+
 

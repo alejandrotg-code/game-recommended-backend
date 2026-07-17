@@ -220,7 +220,7 @@ async def recomendar_juegos(
         if not recommendation_service.ready:
             raise HTTPException(
                 status_code=503,
-                detail="El clasificador de géneros no está cargado o disponible en el servidor."
+                detail=f"El clasificador de géneros no está cargado o disponible en el servidor. Detalles de carga: {recommendation_service.load_errors}"
             )
         resultado = await recommendation_service.recommend_by_description(description)
         return resultado

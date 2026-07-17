@@ -19,36 +19,58 @@ class RecommendationService:
         self.vectorizer_data = None
         self.classes = None
         self.games_df = None
+        self.load_errors = {}
         self.load_assets()
 
     def load_assets(self):
         try:
             if os.path.exists(MODEL_PATH):
-                self.model = tf.keras.models.load_model(MODEL_PATH)
-                print(f"INFO: Modelo de Keras cargado exitosamente desde {MODEL_PATH}.")
+                try:
+                    self.model = tf.keras.models.load_model(MODEL_PATH)
+                    print(f"INFO: Modelo de Keras cargado exitosamente desde {MODEL_PATH}.")
+                except Exception as e:
+                    self.load_errors["model_load_error"] = str(e)
+                    print(f"ERROR: No se pudo cargar el modelo de Keras: {e}")
             else:
+                self.load_errors["model_missing"] = f"No se encontró el archivo en {MODEL_PATH}"
                 print(f"WARN: No se encontró el modelo de Keras en: {MODEL_PATH}")
 
             if os.path.exists(MLB_PATH):
-                self.mlb = joblib.load(MLB_PATH)
-                self.classes = self.mlb.classes_
-                print(f"INFO: MultiLabelBinarizer cargado exitosamente desde {MLB_PATH}.")
+                try:
+                    self.mlb = joblib.load(MLB_PATH)
+                    self.classes = self.mlb.classes_
+                    print(f"INFO: MultiLabelBinarizer cargado exitosamente desde {MLB_PATH}.")
+                except Exception as e:
+                    self.load_errors["mlb_load_error"] = str(e)
+                    print(f"ERROR: No se pudo cargar mlb_classes: {e}")
             else:
+                self.load_errors["mlb_missing"] = f"No se encontró el archivo en {MLB_PATH}"
                 print(f"WARN: No se encontró mlb_classes en: {MLB_PATH}")
 
             if os.path.exists(VECTORIZER_PATH):
-                self.vectorizer_data = joblib.load(VECTORIZER_PATH)
-                print(f"INFO: Datos del vectorizador cargados exitosamente desde {VECTORIZER_PATH}.")
+                try:
+                    self.vectorizer_data = joblib.load(VECTORIZER_PATH)
+                    print(f"INFO: Datos del vectorizador cargados exitosamente desde {VECTORIZER_PATH}.")
+                except Exception as e:
+                    self.load_errors["vectorizer_load_error"] = str(e)
+                    print(f"ERROR: No se pudo cargar keras_vectorizer: {e}")
             else:
+                self.load_errors["vectorizer_missing"] = f"No se encontró el archivo en {VECTORIZER_PATH}"
                 print(f"WARN: No se encontró keras_vectorizer en: {VECTORIZER_PATH}")
 
             if os.path.exists(CSV_PATH):
-                self.games_df = pd.read_csv(CSV_PATH)
-                print(f"INFO: Catálogo de juegos cargado desde {CSV_PATH} ({len(self.games_df)} juegos).")
+                try:
+                    self.games_df = pd.read_csv(CSV_PATH)
+                    print(f"INFO: Catálogo de juegos cargado desde {CSV_PATH} ({len(self.games_df)} juegos).")
+                except Exception as e:
+                    self.load_errors["csv_load_error"] = str(e)
+                    print(f"ERROR: No se pudo cargar el catálogo de juegos: {e}")
             else:
+                self.load_errors["csv_missing"] = f"No se encontró el archivo en {CSV_PATH}"
                 print(f"WARN: No se encontró el catálogo de juegos en: {CSV_PATH}")
 
         except Exception as e:
+            self.load_errors["general_error"] = str(e)
             print(f"ERROR: No se pudieron cargar los componentes de clasificación: {e}")
 
     @property

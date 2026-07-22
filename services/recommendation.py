@@ -16,14 +16,15 @@ VECTORIZER_PATH = os.path.join(BASE_DIR, "model", "keras_vectorizer.joblib")
 CSV_PATH = os.path.join(BASE_DIR, "model", "dataset_steam_descripciones.csv")
 
 class RecommendationService:
-    def __init__(self):
+    def __init__(self, auto_load: bool = False):
         self.model = None
         self.mlb = None
         self.vectorizer_data = None
         self.classes = None
         self.games_df = None
         self.load_errors = {}
-        self.load_assets()
+        if auto_load:
+            self.load_assets()
 
     def load_assets(self):
         try:

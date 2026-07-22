@@ -20,9 +20,11 @@ logging.basicConfig(
 )
 
 from middleware import RateLimitMiddleware
-from services import sentiment_service
+from services import sentiment_service, recommendation_service
 from services.steam import close_http_client
 from routers import games_router, health_router
+
+logger = logging.getLogger(__name__)
 
 # ── Configuración desde entorno ──────────────────────────────
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
@@ -33,6 +35,13 @@ RATE_WINDOW = int(os.getenv("RATE_WINDOW", "60"))
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Gestiona el ciclo de vida de la app: startup y shutdown."""
+    # Startup: cargar modelos de ML de forma explícita al arrancar la app
+    if not sentiment_service.model_loaded:
+        logger.info("Cargando modelo de sentimiento en el arranque...")
+        sentiment_service.load_model()
+    if not recommendation_service.ready:
+        logger.info("Cargando artefactos de recomendación Keras en el arranque...")
+        recommendation_service.load_assets()
     yield
     # Shutdown: cerrar el cliente HTTP compartido
     await close_http_client()

@@ -10,7 +10,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(BASE_DIR, "model", "modelo_sentimiento.joblib")
 
 class SentimentService:
-    def __init__(self, model_path: str = MODEL_PATH):
+    def __init__(self, model_path: str = MODEL_PATH, auto_load: bool = False):
         self.model_path = model_path
         self.vectorizador = None
         self.modelo = None
@@ -21,7 +21,8 @@ class SentimentService:
         self.re_puntuacion = re.compile(r'[^\w\s]')
         self.re_numeros = re.compile(r'\d+')
         
-        self.load_model()
+        if auto_load:
+            self.load_model()
 
     def load_model(self):
         try:

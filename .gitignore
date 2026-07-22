@@ -10,7 +10,8 @@ ENV/
 
 # Entornos y secretos
 .env
-.env.*
+.env.production
+.env.local
 
 # Modelo
 model/

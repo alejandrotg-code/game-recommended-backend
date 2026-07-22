@@ -6,6 +6,19 @@ from services.cache import cache_service
 router = APIRouter()
 
 
+def _sanitize_display_name(name: str, max_length: int = 50) -> str:
+    """
+    Limpia un nombre de usuario para exponerlo de forma segura.
+    Elimina caracteres de control, limita la longitud y strip de whitespace.
+    """
+    # Eliminar caracteres de control (excepto espacios) y normalizar whitespace
+    cleaned = "".join(c for c in name if c.isprintable() or c.isspace())
+    cleaned = " ".join(cleaned.split())  # colapsar whitespace múltiple
+    if len(cleaned) > max_length:
+        cleaned = cleaned[:max_length].rstrip()
+    return cleaned if cleaned else "Usuario de Steam"
+
+
 def generar_badge_svg(recommendation_level: str, positives_pct: float) -> str:
     color_map = {
         "Extremadamente Recomendado": "#10b981",
@@ -139,11 +152,11 @@ async def analizar_reseñas(
 
         reseñas_clasificadas.append({
             "recommendation_id": r.get("recommendationid"),
-            "author": r.get("author", {}).get("personaname", "Usuario de Steam"),
+            "author": _sanitize_display_name(r.get("author", {}).get("personaname", "")),
             "playtime_forever": r.get("author", {}).get("playtime_forever", 0),
             "review_text": r.get("review", "").strip(),
             "sentiment_predicted": "Positivo" if sentimiento_ia == 1 else "Negativo",
-            "voted_up_steam": bool(voted_up_steam)
+            "voted_up_steam": bool(voted_up_steam),
         })
 
     total_reviews = len(reviews_raw)

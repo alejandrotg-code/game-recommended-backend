@@ -1,6 +1,9 @@
 import os
 import re
+import logging
 import joblib
+
+logger = logging.getLogger(__name__)
 
 # Determinamos la ruta del modelo relativa a este archivo (services/sentiment.py)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,11 +29,11 @@ class SentimentService:
                 componentes = joblib.load(self.model_path)
                 self.vectorizador = componentes["vectorizador"]
                 self.modelo = componentes["modelo"]
-                print(f"INFO: Modelo de sentimiento cargado exitosamente desde {self.model_path}.")
+                logger.info("Modelo de sentimiento cargado desde %s", self.model_path)
             else:
-                print(f"WARN: No se encontro el archivo del modelo en: {self.model_path}")
+                logger.warning("No se encontró el archivo del modelo en: %s", self.model_path)
         except Exception as e:
-            print(f"ERROR: No se pudo cargar el modelo de sentimiento: {e}")
+            logger.error("No se pudo cargar el modelo de sentimiento: %s", e)
 
     @property
     def model_loaded(self) -> bool:

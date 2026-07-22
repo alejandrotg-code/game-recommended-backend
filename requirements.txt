@@ -4,13 +4,13 @@ uvicorn==0.47.0
 python-dotenv==1.2.2
 
 # Cache
-cachetools
+cachetools>=5.3,<6
 
 # Machine Learning
 joblib==1.5.3
 scikit-learn==1.7.2
-pandas
-tensorflow
+pandas>=2.0,<3
+tensorflow>=2.15,<3
 
 # Testing
 pytest==9.0.3

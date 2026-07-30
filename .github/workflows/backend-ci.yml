@@ -13,27 +13,32 @@ jobs:
     - name: Descargar código del repositorio
       uses: actions/checkout@v4
 
-    - name: Configurar Entorno de Conda
-      uses: conda-incubator/setup-miniconda@v3
+    - name: Configurar Python 3.10
+      uses: actions/setup-python@v5
       with:
-        auto-update-conda: true
-        python-version: '3.10.20'
-        activate-environment: test-env
+        python-version: '3.10'
+        cache: 'pip'
 
-    - name: Instalar dependencias con Conda y Pip
-      shell: bash -el {0}
+    - name: Instalar dependencias
       run: |
-        conda install -y pytest flake8
+        python -m pip install --upgrade pip
+        pip install pytest flake8
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
     - name: Validar formato del código (Linter)
-      shell: bash -el {0}
       run: |
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Ejecutar Tests con Pytest
-      shell: bash -el {0}
+      env:
+        TF_ENABLE_ONEDNN_OPTS: '0'
+        OMP_NUM_THREADS: '1'
+        MKL_NUM_THREADS: '1'
+        PYTHONPATH: '.'
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        QDRANT_URL: ${{ secrets.QDRANT_URL }}
+        QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
       run: |
         pytest
 

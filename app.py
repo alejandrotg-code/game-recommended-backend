@@ -5,9 +5,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# Cargar variables de entorno desde .env.development o .env.production
+# Cargar variables de entorno
 env = os.getenv("ENV", "development")
 load_dotenv(f".env.{env}", override=True)
+if os.path.exists(".env.production"):
+    load_dotenv(".env.production", override=True)
 
 # ── Logging ──────────────────────────────────────────────────
 # En development: todo visible, formato legible
@@ -20,9 +22,9 @@ logging.basicConfig(
 )
 
 from middleware import RateLimitMiddleware
-from services import sentiment_service, recommendation_service
+from services import sentiment_service
 from services.steam import close_http_client
-from routers import games_router, health_router
+from routers import games_router, health_router, rag_router
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +37,10 @@ RATE_WINDOW = int(os.getenv("RATE_WINDOW", "60"))
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Gestiona el ciclo de vida de la app: startup y shutdown."""
-    # Startup: cargar modelos de ML de forma explícita al arrancar la app
+    # Startup: cargar modelo de sentimiento en el arranque
     if not sentiment_service.model_loaded:
         logger.info("Cargando modelo de sentimiento en el arranque...")
         sentiment_service.load_model()
-    if not recommendation_service.ready:
-        logger.info("Cargando artefactos de recomendación Keras en el arranque...")
-        recommendation_service.load_assets()
     yield
     # Shutdown: cerrar el cliente HTTP compartido
     await close_http_client()
@@ -59,7 +58,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -69,6 +68,7 @@ app.add_middleware(RateLimitMiddleware, max_requests=RATE_LIMIT, window_seconds=
 # Registrar routers
 app.include_router(games_router)
 app.include_router(health_router)
+app.include_router(rag_router)
 
 
 @app.get("/")

@@ -6,7 +6,7 @@ from services import rag_service
 router = APIRouter(prefix="/api/rag", tags=["Recomendador RAG IA"])
 
 class RAGQueryRequest(BaseModel):
-    query: str = Field(..., description="Búsqueda o estado de ánimo expresado por el usuario en español", example="Un juego indie relajante con buena música para pasar un día duro")
+    query: str = Field(..., description="Búsqueda o estado de ánimo expresado por el usuario en español", json_schema_extra={"example": "Un juego indie relajante con buena música para pasar un día duro"})
     top_k: int = Field(default=4, ge=1, le=10, description="Número de recomendaciones a devolver")
 
 @router.post("/recommend", response_model=Dict[str, Any])

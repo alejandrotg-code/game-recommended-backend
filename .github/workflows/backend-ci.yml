@@ -37,8 +37,6 @@ jobs:
         MKL_NUM_THREADS: '1'
         PYTHONPATH: '.'
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        QDRANT_URL: ${{ secrets.QDRANT_URL }}
-        QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
       run: |
         pytest
 

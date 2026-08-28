@@ -71,7 +71,7 @@ async def buscar_juegos_steam(term: str) -> dict:
                 "metascore": item.get("metascore") or "N/A",
             })
 
-            if len(resultados) >= 15:
+            if len(resultados) >= 30:
                 break
 
         return {

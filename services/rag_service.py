@@ -1,151 +1,206 @@
 import os
 import json
 import logging
-import httpx
 from typing import List, Dict, Any
-from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 from langchain_groq import ChatGroq
+from services.steam import buscar_juegos_steam, obtener_detalles_juego
 
 logger = logging.getLogger(__name__)
 
-# Configuración de clientes y modelos desde variables de entorno
 groq_api_key = os.getenv("GROQ_API_KEY")
-qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
-qdrant_api_key = os.getenv("QDRANT_API_KEY", None)
+groq_model_default = os.getenv("GROQ_MODEL", "groq/compound-mini")
 
-# Inicializar cliente de Qdrant y modelo de Embeddings
-qdrant_client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-def get_groq_llm(model_name: str = "llama-3.1-8b-instant") -> ChatGroq:
+def get_groq_llm(model_name: str = groq_model_default) -> ChatGroq:
     """Retorna cliente de Groq LLM con la API Key configurada."""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY no está configurada en el entorno.")
     return ChatGroq(temperature=0.2, model_name=model_name, api_key=api_key)
 
-async def translate_es_to_en(query_es: str) -> str:
-    """Traduce la consulta del usuario de español a inglés usando Groq de forma instantánea."""
-    llm = get_groq_llm("llama-3.1-8b-instant")
-    prompt = f"""You are a translator for a video game recommendation engine.
-Translate the following user search query from Spanish to English.
-Output ONLY the clean English translation, without quotes, explanations or extra text.
 
-Spanish Query: {query_es}
-English Translation:"""
+async def extract_search_terms_and_famous_games(query_es: str) -> Dict[str, Any]:
+    """
+    Traduce la consulta del usuario, extrae términos de búsqueda para Steam
+    y propone una lista de títulos famosos de referencia del catálogo de Steam.
+    """
+    llm = get_groq_llm()
+    prompt = f"""You are a video game expert and Steam catalog search optimizer.
+Given the user query in Spanish: "{query_es}"
+
+Task:
+1. Translate and optimize the request into 2 to 4 clean English search keywords or short terms suitable for searching on Steam (e.g., ["farm", "farming", "cozy", "relaxing"]).
+2. Provide a list of 6 to 10 famous, highly popular benchmark video games available on Steam that perfectly match this mood/genre (e.g., if user asks for relaxing farming games, include "Stardew Valley", "Slime Rancher", "Farm Together 2", "Coral Island", "Fae Farm", "Sun Haven", "Roots of Pacha").
+
+Output ONLY a strict JSON object with no markdown backticks, quotes or extra commentary:
+{{
+  "query_en": "primary search term",
+  "keywords": ["term1", "term2", "term3"],
+  "famous_games": ["Game Title 1", "Game Title 2", "Game Title 3", "Game Title 4", "Game Title 5"]
+}}
+"""
     try:
-        res = llm.invoke(prompt)
-        translated = res.content.strip()
-        logger.info(f"Traducción Groq ES -> EN: '{query_es}' -> '{translated}'")
-        return translated
+        res = await llm.ainvoke(prompt)
+        raw = res.content.strip()
+        if raw.startswith("```json"):
+            raw = raw.replace("```json", "").replace("```", "").strip()
+        elif raw.startswith("```"):
+            raw = raw.replace("```", "").strip()
+
+        data = json.loads(raw)
+        logger.info(f"Groq extracción exitosa para '{query_es}': keywords={data.get('keywords')}, famous={data.get('famous_games')}")
+        return data
     except Exception as e:
-        logger.warning(f"Error traduciendo query con Groq: {e}. Se usará query original.")
-        return query_es
+        logger.warning(f"Error extrayendo datos con Groq: {e}. Se usará fallback.")
+        return {
+            "query_en": query_es,
+            "keywords": [query_es],
+            "famous_games": []
+        }
+
+
+async def translate_and_extract_search_term(query_es: str) -> str:
+    """Función de compatibilidad para extraer el término primario en inglés."""
+    info = await extract_search_terms_and_famous_games(query_es)
+    return info.get("query_en", query_es)
+
 
 async def recommend_games_rag(query_es: str, top_k: int = 4) -> Dict[str, Any]:
     """
-    Pipeline RAG completo:
-    1. Traduce consulta de español a inglés.
-    2. Convierte la consulta a vector y busca en Qdrant (semántica).
-    3. Genera una recomendación estructurada y razonada en español con Groq Llama 3.
+    Pipeline de recomendación híbrido RAG usando la API de Steam en tiempo real + Groq:
+    1. Groq analiza la consulta, genera palabras clave optimizadas y sugiere títulos emblemáticos del género.
+    2. Consulta en tiempo real la API oficial de Steam para obtener datos en vivo de los títulos sugeridos y de las búsquedas.
+    3. Construye un pool rico de candidatos que incluye grandes éxitos reconocidos (como Stardew Valley) junto con novedades de Steam.
+    4. Groq selecciona los mejores `top_k` y redacta un resumen empático en español con razones personalizadas.
     """
-    # 1. Traducir consulta al inglés para maximizar precisión semántica en el catálogo de Steam
-    query_en = await translate_es_to_en(query_es)
+    # 1. Obtener palabras clave y juegos famosos vía Groq
+    info = await extract_search_terms_and_famous_games(query_es)
+    query_en = info.get("query_en", query_es)
+    keywords = info.get("keywords", [query_en])
+    famous_games_suggested = info.get("famous_games", [])
 
-    # 2. Búsqueda por Similitud de Vectores en Qdrant
-    vector_query = embedding_model.encode(query_en).tolist()
-    
-    try:
-        if hasattr(qdrant_client, "query_points"):
-            res = qdrant_client.query_points(
-                collection_name="steam_games",
-                query=vector_query,
-                limit=top_k
-            )
-            search_results = res.points
-        else:
-            search_results = qdrant_client.search(
-                collection_name="steam_games",
-                query_vector=vector_query,
-                limit=top_k
-            )
-    except Exception as e:
-        logger.error(f"Error consultando Qdrant: {e}")
-        raise RuntimeError(f"No se pudo consultar la base de datos vectorial Qdrant: {e}")
+    candidate_map: Dict[int, Dict[str, Any]] = {}
 
-    games_found = [hit.payload for hit in search_results if hasattr(hit, "payload")]
+    # 2a. Buscar los títulos famosos en tiempo real en Steam para garantizar su disponibilidad e ID
+    for title in famous_games_suggested:
+        try:
+            res = await buscar_juegos_steam(term=title)
+            games = res.get("games", [])
+            if games:
+                first = games[0]
+                app_id = first.get("id")
+                if app_id and app_id not in candidate_map:
+                    candidate_map[app_id] = first
+        except Exception as e:
+            logger.debug(f"No se pudo obtener '{title}' de Steam: {e}")
 
-    if not games_found:
+    # 2b. Buscar por palabras clave en la API de Steam
+    for kw in keywords + [query_en, query_es]:
+        if len(candidate_map) >= max(top_k + 10, 30):
+            break
+        try:
+            res = await buscar_juegos_steam(term=kw)
+            for g in res.get("games", []):
+                app_id = g.get("id")
+                if app_id and app_id not in candidate_map:
+                    candidate_map[app_id] = g
+        except Exception as e:
+            logger.debug(f"No se pudieron obtener resultados para palabra clave '{kw}': {e}")
+
+    candidate_games = list(candidate_map.values())
+
+    if not candidate_games:
         return {
             "query_es": query_es,
             "query_en": query_en,
-            "summary": "No se encontraron juegos que coincidan con tu búsqueda.",
+            "summary": "No se encontraron juegos en tiempo real en Steam que coincidan con tu búsqueda.",
             "games": []
         }
 
-    # 3. Construir Prompt para Groq (Llama 3) para generar recomendación en español
-    llm = get_groq_llm("llama-3.1-8b-instant")
+    # Limitar el pool final enviado a Groq para análisis
+    candidate_games = candidate_games[:max(top_k + 10, 30)]
+
+    # 3. Construir Prompt para Groq para analizar y seleccionar los mejores top_k juegos
+    llm = get_groq_llm()
     
     context_games_text = ""
-    for idx, g in enumerate(games_found, 1):
-        context_games_text += f"\nJuego {idx}:\n- Título: {g.get('name')}\n- AppID: {g.get('app_id')}\n- Géneros: {g.get('genres')}\n- Etiquetas: {g.get('tags')}\n- Descripción: {g.get('about')[:300]}...\n"
+    for idx, g in enumerate(candidate_games, 1):
+        context_games_text += f"\nJuego {idx}:\n- AppID: {g.get('id')}\n- Título: {g.get('name')}\n- Precio: {g.get('price')}\n- Metascore: {g.get('metascore')}\n"
 
-    prompt = f"""Eres un recomendador experto de videojuegos muy empático y entusiasta.
-El usuario ha expresado en español la siguiente búsqueda/estado de ánimo: "{query_es}" (traducido a inglés como: "{query_en}").
+    prompt = f"""Eres un recomendador experto de videojuegos empático, entusiasta e informado.
+El usuario ha expresado en español la siguiente búsqueda o estado de ánimo: "{query_es}" (búsqueda procesada: "{query_en}").
 
-A continuación tienes los mejores {len(games_found)} juegos encontrados semánticamente en el catálogo de Steam:
+A continuación tienes una lista en tiempo real de juegos devueltos directamente por la API de Steam (incluye éxitos referentes del género y opciones recientes):
 {context_games_text}
 
 Tu objetivo:
-1. Escribe un resumen inicial breve y cordial en español en sintonía con el estado de ánimo o petición del usuario.
-2. Para CADA juego de la lista, explica brevemente en 2 frases por qué encaja perfectamente con su solicitud.
+1. Escribe un resumen inicial breve y cordial en español (2-3 frases) en sintonía con el deseo/estado de ánimo del usuario.
+2. Selecciona los mejores {min(top_k, len(candidate_games))} juegos de la lista, asegurándote de priorizar los títulos más relevantes, queridos y destacados para la preferencia del usuario. Para CADA UNO, explica brevemente en 2 frases por qué encaja perfectamente con su solicitud.
 
-Responde ÚNICAMENTE en idioma ESPAÑOL con la siguiente estructura JSON estricta (sin bloques ```json):
+Responde ÚNICAMENTE en idioma ESPAÑOL con la siguiente estructura JSON estricta (sin bloques ```json ni texto adicional):
 {{
   "resumen": "Tu resumen empático en español aquí",
   "razones": {{
-    "APP_ID_1": "Razón en español para el juego 1",
-    "APP_ID_2": "Razón en español para el juego 2"
+    "APP_ID_COMO_STRING": "Razón en español para el juego"
   }}
 }}
 """
 
     try:
-        res = llm.invoke(prompt)
+        res = await llm.ainvoke(prompt)
         raw_output = res.content.strip()
         
-        # Limpieza por si devuelve bloques markdown
+        # Limpieza de markdown
         if raw_output.startswith("```json"):
             raw_output = raw_output.replace("```json", "").replace("```", "").strip()
         elif raw_output.startswith("```"):
             raw_output = raw_output.replace("```", "").strip()
 
         parsed_ia = json.loads(raw_output)
-        summary_es = parsed_ia.get("resumen", "Aquí tienes las mejores opciones encontradas:")
+        summary_es = parsed_ia.get("resumen", "Aquí tienes las mejores opciones encontradas en Steam:")
         razones_map = parsed_ia.get("razones", {})
     except Exception as e:
-        logger.warning(f"Error parseando JSON de Groq: {e}. Generando fallback texto.")
-        summary_es = f"Hemos encontrado {len(games_found)} recomendaciones para ti basadas en '{query_es}'."
+        logger.warning(f"Error parseando respuesta JSON de Groq: {e}. Generando fallback.")
+        summary_es = f"Hemos encontrado {len(candidate_games)} recomendaciones en tiempo real desde la API de Steam para tu búsqueda '{query_es}'."
         razones_map = {}
 
-    # Enriquecer lista final de juegos con razones de la IA e imagen oficial de Steam CDN
+    # 4. Construir la lista final de juegos enriquecidos
     final_games = []
-    for g in games_found:
-        app_id_str = str(g.get("app_id"))
-        reason = razones_map.get(app_id_str, g.get("about", "")[:180] + "...")
+    
+    selected_app_ids = [str(k) for k in razones_map.keys()]
+    
+    chosen_candidates = []
+    if selected_app_ids:
+        for app_id_str in selected_app_ids:
+            found = next((g for g in candidate_games if str(g.get("id")) == app_id_str), None)
+            if found and found not in chosen_candidates:
+                chosen_candidates.append(found)
+
+    for g in candidate_games:
+        if len(chosen_candidates) >= top_k:
+            break
+        if g not in chosen_candidates:
+            chosen_candidates.append(g)
+
+    for g in chosen_candidates[:top_k]:
+        app_id = g.get("id")
+        app_id_str = str(app_id)
+        reason = razones_map.get(app_id_str, f"{g.get('name')} destaca en el catálogo de Steam y coincide con tu búsqueda.")
         
-        header_img = g.get("header_image")
+        details = await obtener_detalles_juego(app_id=app_id) if app_id else {}
+        genres_str = ", ".join(details.get("genres", [])) if details.get("genres") else "General"
+        
+        header_img = g.get("image")
         if not header_img or not str(header_img).startswith("http"):
-            header_img = f"https://cdn.akamai.steamstatic.com/steam/apps/{g.get('app_id')}/header.jpg"
+            header_img = f"https://cdn.akamai.steamstatic.com/steam/apps/{app_id}/header.jpg"
 
         final_games.append({
-            "app_id": g.get("app_id"),
+            "app_id": app_id,
             "name": g.get("name"),
-            "price": g.get("price"),
+            "price": g.get("price", details.get("price", "N/A")),
             "header_image": header_img,
-            "genres": g.get("genres"),
-            "tags": g.get("tags"),
+            "genres": genres_str,
+            "tags": genres_str,
             "reason_ai": reason
         })
 

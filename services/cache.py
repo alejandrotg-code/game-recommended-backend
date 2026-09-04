@@ -23,13 +23,14 @@ class CacheService:
             _search_cache[term.lower().strip()] = data
 
     # ── Analyze ─────────────────────────────────────────────────
-    def get_analyze(self, app_id: int, limit: int) -> dict | None:
+    def get_analyze(self, app_id: int, limit: int | None = None) -> dict | None:
         with _analyze_lock:
-            return _analyze_cache.get((app_id, limit))
+            return _analyze_cache.get(app_id)
 
-    def set_analyze(self, app_id: int, limit: int, data: dict) -> None:
+    def set_analyze(self, app_id: int, limit_or_data: int | dict, data: dict | None = None) -> None:
         with _analyze_lock:
-            _analyze_cache[(app_id, limit)] = data
+            actual_data = data if data is not None else limit_or_data
+            _analyze_cache[app_id] = actual_data
 
     # ── Stats  ───────────────
     @property

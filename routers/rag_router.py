@@ -19,8 +19,8 @@ async def get_rag_recommendation(body: RAGQueryRequest):
     2. Realiza una búsqueda en tiempo real directamente en la API pública de Steam.
     3. Genera una recomendación empática y estructurada en español usando Groq (Llama 3).
     """
-    if not body.query.strip():
-        raise HTTPException(status_code=400, detail="La consulta no puede estar vacía.")
+    if not body.query or len(body.query.strip()) < 3:
+        raise HTTPException(status_code=400, detail="La consulta no puede estar vacía y debe contener al menos 3 caracteres.")
     
     try:
         result = await rag_service.recommend_games_rag(query_es=body.query, top_k=body.top_k)

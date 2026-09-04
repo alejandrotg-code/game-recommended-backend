@@ -7,9 +7,11 @@ from dotenv import load_dotenv
 
 # Cargar variables de entorno
 env = os.getenv("ENV", "development")
-load_dotenv(f".env.{env}", override=True)
-if os.path.exists(".env.production"):
-    load_dotenv(".env.production", override=True)
+env_file = f".env.{env}"
+if os.path.exists(env_file):
+    load_dotenv(env_file, override=True)
+else:
+    load_dotenv(override=True)
 
 # ── Logging ──────────────────────────────────────────────────
 # En development: todo visible, formato legible

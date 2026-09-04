@@ -48,7 +48,15 @@ async def buscar_juegos_steam(term: str) -> dict:
                 detail=f"Error al conectar con la API de Steam (HTTP {response.status_code})",
             )
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as json_err:
+            logger.error("Steam storesearch devolvió formato no-JSON para '%s': %s", term, json_err)
+            raise HTTPException(
+                status_code=502,
+                detail="Respuesta no válida recibida desde la API de Steam.",
+            )
+
         items = data.get("items", [])
 
         resultados = []
@@ -113,7 +121,15 @@ async def obtener_reseñas_steam(app_id: int, limit: int) -> list:
                 detail=f"Error al obtener reseñas de Steam (HTTP {response.status_code})",
             )
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as json_err:
+            logger.error("Steam appreviews devolvió formato no-JSON para app_id=%d: %s", app_id, json_err)
+            raise HTTPException(
+                status_code=502,
+                detail="Respuesta no válida recibida desde la API de Steam.",
+            )
+
         if not data.get("success", False):
             raise HTTPException(
                 status_code=404,

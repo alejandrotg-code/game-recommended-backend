@@ -1,4 +1,6 @@
+import html
 from fastapi import APIRouter, Query, HTTPException, Response
+from starlette.concurrency import run_in_threadpool
 from services.steam import buscar_juegos_steam, obtener_reseñas_steam, obtener_detalles_juego
 from services.sentiment import sentiment_service
 from services.cache import cache_service
@@ -11,9 +13,8 @@ def _sanitize_display_name(name: str, max_length: int = 50) -> str:
     Limpia un nombre de usuario para exponerlo de forma segura.
     Elimina caracteres de control, limita la longitud y strip de whitespace.
     """
-    # Eliminar caracteres de control (excepto espacios) y normalizar whitespace
     cleaned = "".join(c for c in name if c.isprintable() or c.isspace())
-    cleaned = " ".join(cleaned.split())  # colapsar whitespace múltiple
+    cleaned = " ".join(cleaned.split())
     if len(cleaned) > max_length:
         cleaned = cleaned[:max_length].rstrip()
     return cleaned if cleaned else "Usuario de Steam"
@@ -43,6 +44,9 @@ def generar_badge_svg(recommendation_level: str, positives_pct: float) -> str:
     label_x = (label_width / 2) * 10
     text_x = (label_width + text_width / 2) * 10
     
+    # Escapar adecuadamente los caracteres XML
+    safe_text_content = html.escape(text_content)
+    
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20" viewBox="0 0 {total_width * 10} 200">
   <linearGradient id="g" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
@@ -59,11 +63,10 @@ def generar_badge_svg(recommendation_level: str, positives_pct: float) -> str:
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
     <text x="{label_x}" y="140" fill="#010101" fill-opacity=".3">Steam IA</text>
     <text x="{label_x}" y="130">Steam IA</text>
-    <text x="{text_x}" y="140" fill="#010101" fill-opacity=".3">{text_content}</text>
-    <text x="{text_x}" y="130">{text_content}</text>
+    <text x="{text_x}" y="140" fill="#010101" fill-opacity=".3">{safe_text_content}</text>
+    <text x="{text_x}" y="130">{safe_text_content}</text>
   </g>
 </svg>"""
-
 
 
 @router.get("/api/search")
@@ -72,6 +75,9 @@ async def buscar_juegos(term: str = Query(..., min_length=1, description="Nombre
     Busca juegos en la API pública de Steam utilizando un término.
     Respuestas cacheadas 5 minutos por término (case-insensitive).
     """
+    if not term.strip():
+        raise HTTPException(status_code=400, detail="El término de búsqueda no puede estar vacío.")
+
     cached = cache_service.get_search(term)
     if cached:
         return cached
@@ -90,9 +96,6 @@ async def analizar_reseñas(
     Obtiene las reseñas más recientes en español de un juego en Steam,
     las preprocesa y predice el sentimiento utilizando el modelo.
     Respuestas cacheadas 30 minutos por app_id.
-
-    Nota: el parámetro `limit` no afecta al caché — si el resultado ya está
-    cacheado se devuelve directamente independientemente del limit pedido.
     """
     if not sentiment_service.model_loaded:
         raise HTTPException(
@@ -100,9 +103,14 @@ async def analizar_reseñas(
             detail="El modelo de análisis de sentimiento no está disponible en el servidor."
         )
 
-    cached = cache_service.get_analyze(app_id, limit)
+    cached = cache_service.get_analyze(app_id)
     if cached:
-        return cached
+        # Si la respuesta cacheada tiene suficientes reseñas o se pide menos/igual, retornarla recortada
+        cached_copy = dict(cached)
+        if "reviews_classified" in cached_copy:
+            cached_copy["reviews_classified"] = cached_copy["reviews_classified"][:limit]
+            cached_copy["total_reviews_analyzed"] = len(cached_copy["reviews_classified"])
+        return cached_copy
 
     # 1. Obtener reseñas desde la API pública de Steam
     reviews_raw = await obtener_reseñas_steam(app_id, limit)
@@ -111,7 +119,7 @@ async def analizar_reseñas(
     game_details = await obtener_detalles_juego(app_id)
 
     if not reviews_raw:
-        return {
+        empty_res = {
             "app_id": app_id,
             "total_reviews_analyzed": 0,
             "recommendation_level": "Sin reseñas",
@@ -123,13 +131,15 @@ async def analizar_reseñas(
             "reviews_classified": [],
             "game_details": game_details
         }
+        cache_service.set_analyze(app_id, empty_res)
+        return empty_res
 
     # 2. Limpieza y preparación de reseñas
     textos_crudos = [r.get("review", "") for r in reviews_raw]
 
-    # 3. Predicción del sentimiento en lote (vectorización + predicción)
+    # 3. Predicción del sentimiento en lote sin bloquear el Event Loop de FastAPI
     try:
-        predicciones = sentiment_service.predecir_sentimientos(textos_crudos)
+        predicciones = await run_in_threadpool(sentiment_service.predecir_sentimientos, textos_crudos)
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -186,7 +196,7 @@ async def analizar_reseñas(
         "game_details": game_details
     }
 
-    cache_service.set_analyze(app_id, limit, result)
+    cache_service.set_analyze(app_id, result)
     return result
 
 
@@ -196,7 +206,7 @@ async def obtener_badge(app_id: int):
     Devuelve un SVG embebible con el veredicto y el porcentaje positivo de reseñas.
     Utiliza el caché si está disponible, o realiza el análisis al vuelo de 30 reseñas.
     """
-    cached = cache_service.get_analyze(app_id, 30)
+    cached = cache_service.get_analyze(app_id)
     if not cached:
         try:
             cached = await analizar_reseñas(app_id, limit=30)
@@ -218,7 +228,3 @@ async def obtener_badge(app_id: int):
             "Cache-Control": "max-age=1800, public"
         }
     )
-
-
-
-

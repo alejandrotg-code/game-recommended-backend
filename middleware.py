@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 from cachetools import TTLCache
@@ -9,18 +10,22 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, max_requests: int = 30, window_seconds: int = 60, max_ips: int = 10_000):
+    def __init__(self, app, max_requests: int = 30, window_seconds: int = 60, max_ips: int = 10_000, rag_max_requests: int = 10):
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        # Utiliza TTLCache para limitar el número máximo de IPs rastreadas y su tiempo de vida
+        self.rag_max_requests = rag_max_requests
+        self.trust_proxy = os.getenv("TRUST_PROXY", "false").lower() in ("true", "1")
+        # TTLCache para limitar IPs rastreadas y su TTL
         self.request_history: TTLCache[str, list[float]] = TTLCache(maxsize=max_ips, ttl=window_seconds)
+        self.rag_request_history: TTLCache[str, list[float]] = TTLCache(maxsize=max_ips, ttl=window_seconds)
 
     def _extract_client_ip(self, request: Request) -> str:
-        """Extrae la IP real del cliente, respetando proxies reverso."""
-        x_forwarded_for = request.headers.get("x-forwarded-for")
-        if x_forwarded_for:
-            return x_forwarded_for.split(",")[0].strip()
+        """Extrae la IP real del cliente. Solo confía en X-Forwarded-For si TRUST_PROXY es True."""
+        if self.trust_proxy:
+            x_forwarded_for = request.headers.get("x-forwarded-for")
+            if x_forwarded_for:
+                return x_forwarded_for.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
     async def dispatch(self, request: Request, call_next):
@@ -31,21 +36,30 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = self._extract_client_ip(request)
         now = time.time()
 
-        # Obtener timestamps del cliente o crear nueva lista
-        timestamps = self.request_history.get(client_ip)
-        if timestamps is None:
-            timestamps = []
-        else:
-            # Filtrar marcas de tiempo fuera de la ventana activa
-            timestamps = [t for t in timestamps if now - t < self.window_seconds]
+        # ── Rate Limit dedicado para /api/rag ──
+        if request.url.path.startswith("/api/rag"):
+            rag_timestamps = self.rag_request_history.get(client_ip) or []
+            rag_timestamps = [t for t in rag_timestamps if now - t < self.window_seconds]
+            if len(rag_timestamps) >= self.rag_max_requests:
+                retry_after = int(self.window_seconds - (now - rag_timestamps[0]))
+                logger.warning("Rate limit RAG bloqueado: IP=%s", client_ip)
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": "Demasiadas peticiones de recomendación IA. Por favor, espera un momento.",
+                        "retry_after_seconds": max(retry_after, 1),
+                    },
+                )
+            rag_timestamps.append(now)
+            self.rag_request_history[client_ip] = rag_timestamps
 
-        # Verificar límite
+        # ── Rate Limit general ──
+        timestamps = self.request_history.get(client_ip) or []
+        timestamps = [t for t in timestamps if now - t < self.window_seconds]
+
         if len(timestamps) >= self.max_requests:
             retry_after = int(self.window_seconds - (now - timestamps[0]))
-            logger.warning(
-                "Rate limit bloqueado: IP=%s peticiones_recientes=%d",
-                client_ip, len(timestamps),
-            )
+            logger.warning("Rate limit general bloqueado: IP=%s", client_ip)
             return JSONResponse(
                 status_code=429,
                 content={
@@ -57,4 +71,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         timestamps.append(now)
         self.request_history[client_ip] = timestamps
         return await call_next(request)
-

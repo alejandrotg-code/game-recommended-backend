@@ -47,7 +47,8 @@ class SentimentService:
         texto = self.re_hashtags.sub('', texto)
         texto = self.re_puntuacion.sub('', texto)
         texto = self.re_numeros.sub('', texto)
-        return texto.strip()
+        cleaned = texto.strip()
+        return cleaned if cleaned else "resena_sin_texto_significativo"
 
     def predecir_sentimientos(self, textos: list) -> list:
         """

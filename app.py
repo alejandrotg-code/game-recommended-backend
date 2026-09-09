@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 from middleware import RateLimitMiddleware
-from services import sentiment_service
+from services import sentiment_service, cache_service
 from services.steam import close_http_client
 from routers import games_router, health_router, rag_router
 
@@ -45,6 +45,8 @@ RATE_WINDOW = int(os.getenv("RATE_WINDOW", "60"))
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Gestiona el ciclo de vida de la app: startup y shutdown."""
+    # Limpiar cualquier caché residual de análisis al arrancar
+    cache_service.clear()
     # Startup: cargar modelo de sentimiento en el arranque
     if not sentiment_service.model_loaded:
         logger.info("Cargando modelo de sentimiento en el arranque...")

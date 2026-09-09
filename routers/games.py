@@ -107,7 +107,7 @@ async def analizar_reseñas(
         )
 
     cached = cache_service.get_analyze(app_id)
-    if cached:
+    if cached and cached.get("groq_summary") is not None:
         # Si la respuesta cacheada tiene suficientes reseñas o se pide menos/igual, retornarla recortada
         cached_copy = dict(cached)
         if "reviews_classified" in cached_copy:

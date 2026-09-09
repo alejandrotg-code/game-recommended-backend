@@ -32,6 +32,11 @@ class CacheService:
             actual_data = data if data is not None else limit_or_data
             _analyze_cache[app_id] = actual_data
 
+    def clear(self) -> None:
+        with _search_lock, _analyze_lock:
+            _search_cache.clear()
+            _analyze_cache.clear()
+
     # ── Stats  ───────────────
     @property
     def stats(self) -> dict:

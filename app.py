@@ -31,7 +31,8 @@ from routers import games_router, health_router, rag_router
 logger = logging.getLogger(__name__)
 
 # ── Configuración desde entorno ──────────────────────────────
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+raw_origins = os.getenv("CORS_ORIGINS", "https://game-recommended.alejandrotg.es,http://localhost:5173")
+CORS_ORIGINS = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 RATE_LIMIT = int(os.getenv("RATE_LIMIT", "30"))
 RATE_WINDOW = int(os.getenv("RATE_WINDOW", "60"))
 
@@ -55,17 +56,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configurar middleware de CORS
+# Aplicar middleware de rate limit primero (para que quede interno)
+app.add_middleware(RateLimitMiddleware, max_requests=RATE_LIMIT, window_seconds=RATE_WINDOW)
+
+# Configurar middleware de CORS AL FINAL (para que sea la capa más externa y responda siempre las cabeceras CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.alejandrotg\.es",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Aplicar middleware de rate limit
-app.add_middleware(RateLimitMiddleware, max_requests=RATE_LIMIT, window_seconds=RATE_WINDOW)
 
 # Registrar routers
 app.include_router(games_router)

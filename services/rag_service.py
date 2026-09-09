@@ -9,7 +9,7 @@ from services.steam import buscar_juegos_steam, obtener_detalles_juego
 logger = logging.getLogger(__name__)
 
 groq_api_key = os.getenv("GROQ_API_KEY")
-groq_model_default = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+groq_model_default = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 
 def sanitize_prompt_input(text: str) -> str:

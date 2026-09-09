@@ -8,6 +8,7 @@
 
 API REST de alto rendimiento desarrollada con **FastAPI** que impulsa la plataforma **Game Recommended AI**. Integra procesamiento de lenguaje natural (NLP) y modelos de Machine Learning/Deep Learning para auditar las reseñas en español de videojuegos en Steam y recomendar títulos mediante búsqueda semántica por descripción.
 
+
 🚀 **[Prueba la Aplicación en Producción](https://game-recommended.alejandrotg.es)**
 
 ---

@@ -5,6 +5,7 @@ from services.steam import buscar_juegos_steam, obtener_reseñas_steam, obtener_
 from services.sentiment import sentiment_service
 from services.cache import cache_service
 from services.affiliate_price_service import get_affiliate_prices
+from services.curation import curate_diverse_reviews
 
 router = APIRouter()
 
@@ -113,8 +114,9 @@ async def analizar_reseñas(
             cached_copy["total_reviews_analyzed"] = len(cached_copy["reviews_classified"])
         return cached_copy
 
-    # 1. Obtener reseñas desde la API pública de Steam
-    reviews_raw = await obtener_reseñas_steam(app_id, limit)
+    # 1. Obtener piscina amplia de reseñas desde la API pública de Steam para curación
+    fetch_limit = max(limit * 3, 60)
+    reviews_raw = await obtener_reseñas_steam(app_id, fetch_limit)
 
     # 1.5 Obtener detalles adicionales del juego
     game_details = await obtener_detalles_juego(app_id)
@@ -135,10 +137,13 @@ async def analizar_reseñas(
         cache_service.set_analyze(app_id, empty_res)
         return empty_res
 
-    # 2. Limpieza y preparación de reseñas
-    textos_crudos = [r.get("review", "") for r in reviews_raw]
+    # 2. Curación Inteligente de Reseñas por IA (Filtro anti-spam + Diversidad Semántica MMR)
+    reviews_curated = curate_diverse_reviews(reviews_raw, sentiment_service.vectorizador, limit)
 
-    # 3. Predicción del sentimiento en lote sin bloquear el Event Loop de FastAPI
+    # 3. Limpieza y preparación de reseñas curadas
+    textos_crudos = [r.get("review", "") for r in reviews_curated]
+
+    # 4. Predicción del sentimiento en lote sin bloquear el Event Loop de FastAPI
     try:
         predicciones = await run_in_threadpool(sentiment_service.predecir_sentimientos, textos_crudos)
     except Exception as e:
@@ -152,7 +157,7 @@ async def analizar_reseñas(
     positivas_ia = 0
     positivas_steam = 0
 
-    for idx, r in enumerate(reviews_raw):
+    for idx, r in enumerate(reviews_curated):
         sentimiento_ia = predicciones[idx]
         voted_up_steam = 1 if r.get("voted_up") else 0
 
@@ -172,7 +177,7 @@ async def analizar_reseñas(
             "timestamp_updated": r.get("timestamp_updated"),
         })
 
-    total_reviews = len(reviews_raw)
+    total_reviews = len(reviews_curated)
     pos_ia_pct = round((positivas_ia / total_reviews) * 100, 2)
     neg_ia_pct = round(100.0 - pos_ia_pct, 2)
     pos_steam_pct = round((positivas_steam / total_reviews) * 100, 2)

@@ -138,3 +138,4 @@ def test_analyze_empty_author_falls_back_to_default(mock_obtener_reseñas, mock_
     assert response.status_code == 200
     data = response.json()
     assert data["reviews_classified"][0]["author"] == "Usuario de Steam"
+    assert "timestamp_created" in data["reviews_classified"][0]

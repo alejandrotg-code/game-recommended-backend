@@ -4,6 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from services.steam import buscar_juegos_steam, obtener_reseñas_steam, obtener_detalles_juego
 from services.sentiment import sentiment_service
 from services.cache import cache_service
+from services.affiliate_price_service import get_affiliate_prices
 
 router = APIRouter()
 
@@ -167,6 +168,8 @@ async def analizar_reseñas(
             "review_text": r.get("review", "").strip(),
             "sentiment_predicted": "Positivo" if sentimiento_ia == 1 else "Negativo",
             "voted_up_steam": bool(voted_up_steam),
+            "timestamp_created": r.get("timestamp_created"),
+            "timestamp_updated": r.get("timestamp_updated"),
         })
 
     total_reviews = len(reviews_raw)
@@ -228,3 +231,11 @@ async def obtener_badge(app_id: int):
             "Cache-Control": "max-age=1800, public"
         }
     )
+
+
+@router.get("/api/games/{app_id}/affiliate-prices")
+async def obtener_precios_afiliados(app_id: int, name: str = Query(..., min_length=1)):
+    """
+    Devuelve los enlaces y precios aproximados de afiliado para Instant Gaming y G2A.
+    """
+    return await get_affiliate_prices(game_name=name, app_id=app_id)

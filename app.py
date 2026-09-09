@@ -6,12 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
-env = os.getenv("ENV", "development")
+env = os.getenv("ENV")
+if not env:
+    if os.path.exists(".env.production"):
+        env = "production"
+    else:
+        env = "development"
+
 env_file = f".env.{env}"
 if os.path.exists(env_file):
     load_dotenv(env_file, override=True)
-else:
-    load_dotenv(override=True)
+load_dotenv(override=True)
 
 # ── Logging ──────────────────────────────────────────────────
 # En development: todo visible, formato legible

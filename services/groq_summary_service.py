@@ -17,7 +17,7 @@ def get_groq_summary_llm() -> ChatGroq | None:
         return None
 
     # Modelo ultra-rápido soportado por Groq Cloud
-    model_name = os.getenv("GROQ_SUMMARY_MODEL", "llama-3.3-70b-versatile")
+    model_name = os.getenv("GROQ_SUMMARY_MODEL", "openai/gpt-oss-120b")
     return ChatGroq(temperature=0.3, model_name=model_name, api_key=api_key, request_timeout=15.0)
 
 

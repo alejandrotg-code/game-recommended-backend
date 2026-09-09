@@ -12,6 +12,8 @@ ENV/
 .env
 .env.production
 .env.local
+.env*.local
+.env.production.local
 
 # Modelo
 model/

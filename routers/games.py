@@ -6,6 +6,7 @@ from services.sentiment import sentiment_service
 from services.cache import cache_service
 from services.affiliate_price_service import get_affiliate_prices
 from services.curation import curate_diverse_reviews
+from services.groq_summary_service import generate_game_summary_groq
 
 router = APIRouter()
 
@@ -191,6 +192,14 @@ async def analizar_reseñas(
     else:
         nivel_recomendacion = "No Recomendado"
 
+    groq_summary = await generate_game_summary_groq(
+        game_name=game_details.get("name") if game_details else f"AppID {app_id}",
+        app_id=app_id,
+        recommendation_level=nivel_recomendacion,
+        reviews_texts=textos_crudos,
+        game_details=game_details,
+    )
+
     result = {
         "app_id": app_id,
         "total_reviews_analyzed": total_reviews,
@@ -201,7 +210,8 @@ async def analizar_reseñas(
         },
         "steam_voted_up_pct": pos_steam_pct,
         "reviews_classified": reseñas_clasificadas,
-        "game_details": game_details
+        "game_details": game_details,
+        "groq_summary": groq_summary,
     }
 
     cache_service.set_analyze(app_id, result)
